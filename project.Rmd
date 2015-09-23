@@ -1,17 +1,19 @@
 ---
-title: "Prediction"
+title: "Prediction of Quality of Execution in a Weight Lifting Exercise"
 author: "Andrea Schioppa"
 output:
   html_document:
     keep_md: yes
 ---
-We build a Machine Learning algorithm to predict
-how well participants in a weight lifting experiment did. The data is available from the website (http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). We assume that the data is downloaded in the current directory in the file 'pml-training.csv'.
+We train a Machine Learning algorithm to predict
+how well participants in a weight lifting experiment performed the exercises. The data is available from the website (http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). The paper is: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+We assume that the data is downloaded in the current directory in the file `pml-training.csv`.
 
 #Cleaning the Data
 
-We load required libraries.
-```{r libraries, cache = TRUE}
+We load the required libraries.
+```{r libraries, cache = TRUE, message = FALSE}
 library(ggplot2);
 library(caret);
 ```
@@ -22,7 +24,7 @@ We load the training data.
 data.train <- read.csv('pml-training.csv', header=TRUE);
 ```
 
-Remove first column which is just the row number. Some predictors consist of a large
+We remove the first column which is just the row number. Some predictors consist of a large
 fraction of `NA`s and so we remove them.
 
 ```{r clean1, cache=TRUE}
@@ -38,7 +40,7 @@ for(i in 1:length(names(data.train))) {
 data.train <- data.train[,-na.predictors];
 ```
 
-The predictor `cvtd_timestamp`, is a kind of time stamp which has been read as a character,
+The predictor `cvtd_timestamp` is a kind of time stamp which has been read as `character`,
 and we convert it to a numeric format using the `POSIXct` standard.
 
 ```{r clean2, cache = TRUE}
@@ -47,7 +49,7 @@ data.train$cvtd_timestamp <- as.numeric(as.POSIXct(data.train$cvtd_timestamp));
 ```
 
 There are also other predictors which contain many missing values. They were not
-eliminated before because they show as factors; we now remove them:
+eliminated previously, because they show as factors; we now remove them:
 
 ```{r clean3, cache = TRUE}
 
@@ -74,16 +76,15 @@ for(i in 1:length(names(data.train))) {
 }
 ```
 
-# Further Choice of Predictors
+# Choice of Predictors
 
 The cleaned data frame `data.train` contains now 59 columns, 58 of which are predictors, and the last
 one is the variable `classe` which has to be predicted. We now split the data set into a train and test
-part. Note that as we are going to fit a Random Forest, this is not necessary, but we do this to
-illustrate the model
+part. Note that as we are going to fit a Random Forest, this is not necessary (http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr) (in the Coursera Lectures I found this point confusing), but we do
+create a test set to compare the out of sample error on the test set with the error predicted by the training.
 
 ```{r split, cache = TRUE, message = FALSE}
 set.seed(125);
-library(caret);
 
 split.indx <- createDataPartition(data.train$classe, p = 0.8, list = FALSE);
 data.test <- data.train[-split.indx, ]
@@ -96,23 +97,24 @@ The variables `cvtd_timestamp` and `raw_timestamp_part_1` are almost perfectly c
 cor(data.train$cvtd_timestamp, data.train$raw_timestamp_part_1)
 ```
 
-```{r}
-library(caret)
+We illustrate this with a plot.
+
+```{r ts_corr, cache = TRUE}
 timestamps <- data.frame(cvtd = data.train$cvtd_timestamp, rw1 = data.train$raw_timestamp_part_1);
 preproc.tsmp <- preProcess(timestamps, method = c('center', 'scale'));
 timestamps <- predict(preproc.tsmp, timestamps)
 with(timestamps, plot(cvtd, rw1));
 ```
 
-Also a plot shows that `raw_timestamp_part_2` is rather homogeneous among the different classes.
+Another plot shows that the other time stamp variable `raw_timestamp_part_2` is rather homogeneous among the different classes.
 
-```{r}
+```{r ts2_plot, cache = TRUE}
 tmsp.plot <- ggplot(data.train, aes(x=raw_timestamp_part_2, fill=classe, y = ..count..));
 tmsp.plot <- tmsp.plot
 tmsp.plot + geom_histogram() + facet_wrap(~classe);
 ```
 
-Overall, the timestamps are variables which to do not seem to have predictive value, so we
+Overall, the timestamps are variables which to do not seem to have much predictive value, so we
 remove them.
 
 ```{r stamp_rem, cache = TRUE}
@@ -124,9 +126,9 @@ data.test <- data.test[,-which(names(data.test) %in% toremove)];
 # Model Choice and Training
 
 We now fit a Random Forest. We have also tried
-other models using `method=lda`, `method=gbm`, `method=svmLinear`, but the Random Forest seems to give the best results. 
+other models using `method='lda'`, `method='gbm'`, `method='svmLinear'`, but the Random Forest seemed to give the best results. 
 Note that, as we use a Random Forest, there is no need for explicitly invoking cross-validation
-via setting `TrControl` in this model. 
+via setting `TrControl` (http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr).
 As it takes some hours to train this model, cross-validation would also make the code slower.
 As Fitting the model is time-consuming, we save the model to an external file.
 ```{r train, cache = TRUE, eval = FALSE}
@@ -136,22 +138,47 @@ save(mod.rf, file='model.RData')
 
 We summarize the model.
 
-```{r}
+```{r summary, cache = TRUE}
 load('model.RData')
 mod.rf
 ```
 
+The optimal number of trees is 30; for the error we use 1 - kappa, where kappa is Cohen's kappa (https://en.wikipedia.org/wiki/Cohen's_kappa) (thus the error is closer to 0 when Cohen's kappa is closer to 1).
+In this case the Cohen's kappa is about 0.9958 with a standard deviation of about 0.0008.
+
 The following plot shows how the model used accuracy to select the optimal number of trees.
 
-```{r}
-plot(mod.rf, main='Accuracy vs. Number or trees')
+```{r rf_tree_plot, cache = TRUE}
+plot(mod.rf, main='Accuracy vs. Number of trees')
 ```
 
-We compute the confusion Matrix to show Accuracy and Kappa on the test set to compare with the one predicted from the model.
+We show the variables ordered by relative importance.
 
-```{r}
-library(caret)
+```{r var_imp, cache = TRUE}
+varImp(mod.rf)
+```
+
+We illustrate the relationship between `classe`, `num_window` and `roll_belt` using a plot with the class centres. Even though `num_window` appears as the most important variable, probably it could have been left out of the model as it seems similar to a timestamp.
+
+```{r centre_plot, cache = TRUE}
+train.center <- classCenter(data.train[,which(names(data.train) %in% c('num_window', 'roll_belt'))],
+      data.train$classe, mod.rf$finalModel$prox);
+train.center <- as.data.frame(train.center);
+train.center$classe <- rownames(train.center);
+center.plot <- qplot(num_window, roll_belt, col = classe, data = data.train);
+center.plot + geom_point(aes(x=num_window, y = roll_belt, col = classe),
+               size = 5, shape = 4, data = train.center);
+```
+
+# Out of sample error on the test set.
+
+We compute the confusion Matrix to show Accuracy and Kappa on the test set to compare with the one predicted by the model.
+
+```{r out_samp_err, cache = TRUE}
 pred.test <- predict(mod.rf, newdata = data.test)
 tab <- confusionMatrix(data.test$classe, pred.test)
 tab
 ```
+
+The generalization error is close to the one obtained by training the model. In fact, Cohen's kappa
+is now about 0.9974.
