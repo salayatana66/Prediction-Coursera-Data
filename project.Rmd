@@ -115,10 +115,11 @@ tmsp.plot + geom_histogram() + facet_wrap(~classe);
 ```
 
 Overall, the timestamps are variables which to do not seem to have much predictive value, so we
-remove them.
+remove them. We also remove `num_window` which keeps track of the number of the window in which the measures
+were taken.
 
 ```{r stamp_rem, cache = TRUE}
-toremove <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp');
+toremove <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'num_window');
 data.train <- data.train[,-which(names(data.train) %in% toremove)];
 data.test <- data.test[,-which(names(data.test) %in% toremove)];
 ```
@@ -144,7 +145,7 @@ mod.rf
 ```
 
 The optimal number of trees is 30; for the error we use 1 - kappa, where kappa is Cohen's kappa (https://en.wikipedia.org/wiki/Cohen's_kappa) (thus the error is closer to 0 when Cohen's kappa is closer to 1).
-In this case the Cohen's kappa is about 0.9958 with a standard deviation of about 0.0008.
+In this case the Cohen's kappa is about 0.9881 with a standard deviation of about 0.0014.
 
 The following plot shows how the model used accuracy to select the optimal number of trees.
 
@@ -158,16 +159,17 @@ We show the variables ordered by relative importance.
 varImp(mod.rf)
 ```
 
-We illustrate the relationship between `classe`, `num_window` and `roll_belt` using a plot with the class centres. Even though `num_window` appears as the most important variable, probably it could have been left out of the model as it seems similar to a timestamp.
+We illustrate the relationship between `classe`, `roll_belt` and `pitch_forearm` using a plot with the class centres. 
 
-```{r centre_plot, cache = TRUE}
-train.center <- classCenter(data.train[,which(names(data.train) %in% c('num_window', 'roll_belt'))],
+```{r centre_plot, cache = TRUE, eval=TRUE}
+train.center <- classCenter(data.train[,which (names(data.train) %in% c('roll_belt', 'pitch_forearm'))],
       data.train$classe, mod.rf$finalModel$prox);
-train.center <- as.data.frame(train.center);
+train.center <-  as.data.frame(train.center);
 train.center$classe <- rownames(train.center);
-center.plot <- qplot(num_window, roll_belt, col = classe, data = data.train);
-center.plot + geom_point(aes(x=num_window, y = roll_belt, col = classe),
-               size = 5, shape = 4, data = train.center);
+center.plot <- ggplot(aes(x=roll_belt, y=pitch_forearm, col = classe), data = data.train);
+center.plot <- center.plot + geom_point(alpha=0.1)
+center.plot + geom_point(aes(x=roll_belt, y = pitch_forearm, col = classe),
+               size = 8, shape = 10, data = train.center);
 ```
 
 # Out of sample error on the test set.
@@ -175,10 +177,10 @@ center.plot + geom_point(aes(x=num_window, y = roll_belt, col = classe),
 We compute the confusion Matrix to show Accuracy and Kappa on the test set to compare with the one predicted by the model.
 
 ```{r out_samp_err, cache = TRUE}
-pred.test <- predict(mod.rf, newdata = data.test)
+ pred.test <- predict(mod.rf, newdata = data.test)
 tab <- confusionMatrix(data.test$classe, pred.test)
 tab
 ```
 
 The generalization error is close to the one obtained by training the model. In fact, Cohen's kappa
-is now about 0.9974.
+is now about 0.9929.
